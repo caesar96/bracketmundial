@@ -282,26 +282,35 @@ fun BracketScreen(vm: BracketViewModel = viewModel()) {
                 }
                 // Tap: seleccionar · Long press: marcar ganador · Doble tap: zoom animado
                 .pointerInput(hits) {
+                    var lastTapTime = 0L
+                    var lastTapPos = Offset.Zero
                     detectTapGestures(
-                        onDoubleTap = { tap ->
-                            scope.launch {
-                                if (scale.value > 1.05f) {
-                                    // volver a la vista completa, con animación
-                                    launch { scale.animateTo(1f, spring(stiffness = Spring.StiffnessMediumLow)) }
-                                    launch { offset.animateTo(Offset.Zero, spring(stiffness = Spring.StiffnessMediumLow)) }
-                                } else {
-                                    // acercar 2.5x hacia donde se tocó
-                                    val target = 2.5f
-                                    val newOffset =
-                                        (offset.value - tap) * (target / scale.value) + tap
-                                    launch { scale.animateTo(target, spring(stiffness = Spring.StiffnessMediumLow)) }
-                                    launch { offset.animateTo(newOffset, spring(stiffness = Spring.StiffnessMediumLow)) }
-                                }
-                            }
-                        },
                         onTap = { tap ->
-                            val idx = hitTest(tap, size.width, size.height, scale.value, offset.value, hits)
-                            selected = if (idx == selected) null else idx
+                            val now = System.currentTimeMillis()
+                            val isDoubleTap =
+                                now - lastTapTime < 300L && (tap - lastTapPos).getDistance() < 100f
+                            lastTapTime = now
+                            lastTapPos = tap
+
+                            if (isDoubleTap) {
+                                lastTapTime = 0L  // evita que un triple tap cuente doble
+                                scope.launch {
+                                    if (scale.value > 1.05f) {
+                                        launch { scale.animateTo(1f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                                        launch { offset.animateTo(Offset.Zero, spring(stiffness = Spring.StiffnessMediumLow)) }
+                                    } else {
+                                        val target = 2.5f
+                                        val newOffset =
+                                            (offset.value - tap) * (target / scale.value) + tap
+                                        launch { scale.animateTo(target, spring(stiffness = Spring.StiffnessMediumLow)) }
+                                        launch { offset.animateTo(newOffset, spring(stiffness = Spring.StiffnessMediumLow)) }
+                                    }
+                                }
+                            } else {
+                                // selección instantánea, sin esperar timeout de doble tap
+                                val idx = hitTest(tap, size.width, size.height, scale.value, offset.value, hits)
+                                selected = if (idx == selected) null else idx
+                            }
                         },
                         onLongPress = { tap ->
                             val idx = hitTest(tap, size.width, size.height, scale.value, offset.value, hits)
