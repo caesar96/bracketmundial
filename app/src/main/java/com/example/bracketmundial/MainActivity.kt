@@ -25,7 +25,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -292,6 +291,7 @@ fun BracketScreen(
     var showResultDialog by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showUndoConfirm by remember { mutableStateOf(false) }
+    var menuExpandido by remember { mutableStateOf(false) }
 
     LaunchedEffect(syncMessage) {
         syncMessage?.let {
@@ -320,11 +320,11 @@ fun BracketScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(COL_BG).safeDrawingPadding()) {
-        Box(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp)) {
-            Column(
-                Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
                 Text(
                     "CAMINO AL TÍTULO",
                     color = Color(0xFFE9DCC0),
@@ -341,26 +341,34 @@ fun BracketScreen(
                     modifier = Modifier.padding(top = 6.dp)
                 )
             }
-            Row(
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isSyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp).padding(end = 12.dp),
-                        color = COL_GOLD,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    IconButton(onClick = { vm.refresh() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Actualizar resultados", tint = COL_GOLD)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = COL_GOLD,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        IconButton(onClick = { vm.refresh() }) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Actualizar resultados", tint = Color(0xFF8D7F66))
+                        }
                     }
                 }
-                IconButton(onClick = onAbrirResultadosApi) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = "Resultados (API)", tint = COL_GOLD)
-                }
-                IconButton(onClick = onAbrirEquipos) {
-                    Icon(Icons.Filled.List, contentDescription = "Selecciones", tint = COL_GOLD)
+                Box {
+                    IconButton(onClick = { menuExpandido = true }) {
+                        Icon(Icons.Filled.List, contentDescription = "Menú", tint = Color(0xFF8D7F66))
+                    }
+                    DropdownMenu(expanded = menuExpandido, onDismissRequest = { menuExpandido = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Selecciones") },
+                            onClick = { menuExpandido = false; onAbrirEquipos() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Resultados (API)") },
+                            onClick = { menuExpandido = false; onAbrirResultadosApi() }
+                        )
+                    }
                 }
             }
         }
