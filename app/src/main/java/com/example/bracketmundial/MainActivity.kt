@@ -698,11 +698,11 @@ private fun DrawScope.drawBracket(
         )
         drawText(label, topLeft = Offset(lp.x - label.size.width / 2f, lp.y - label.size.height / 2f))
 
-        if (t.wins >= 1) drawFlag(textMeasurer, pt(angPair(i / 2), R_N16 + 62f), 40f, t, false, selected == i)
-        if (t.wins >= 2) drawFlag(textMeasurer, pt(angSect(i / 4), R_QF + 55f), 36f, t, false, selected == i)
-        if (t.wins >= 3) drawFlag(textMeasurer, pt(angQF(i / 8), R_SF + 50f), 32f, t, false, selected == i)
-        if (t.wins >= 4) drawFlag(textMeasurer, pt(angSF(i / 16), 100f), 30f, t, false, selected == i)
-        if (t.wins >= 5) drawFlag(textMeasurer, Offset(CX, CY - 200f), 34f, t, false, true)
+        if (t.wins >= 1) drawFlag(textMeasurer, pt(angPair(i / 2), R_N16 + 62f), 40f, t, out, selected == i)
+        if (t.wins >= 2) drawFlag(textMeasurer, pt(angSect(i / 4), R_QF + 55f), 36f, t, out, selected == i)
+        if (t.wins >= 3) drawFlag(textMeasurer, pt(angQF(i / 8), R_SF + 50f), 32f, t, out, selected == i)
+        if (t.wins >= 4) drawFlag(textMeasurer, pt(angSF(i / 16), 100f), 30f, t, out, selected == i)
+        if (t.wins >= 5) drawFlag(textMeasurer, Offset(CX, CY - 200f), 34f, t, out, true)
     }
 }
 
