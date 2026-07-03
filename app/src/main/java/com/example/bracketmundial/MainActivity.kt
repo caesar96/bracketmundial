@@ -12,9 +12,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -37,11 +41,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -57,6 +60,7 @@ data class Team(
     val c: Color? = null,          // color de su línea si avanzó
     val s: Char,
     val hora: String? = null,
+    val position: Int = -1,        // slot 0..31 que determina su llave en el bracket
 )
 
 val INITIAL_TEAMS = listOf(
@@ -92,41 +96,12 @@ val INITIAL_TEAMS = listOf(
     Team("Francia", "🇫🇷", Color(0xFF3555C4), 'W'),
     Team("Paraguay", "🇵🇾", Color(0xFFD13A30), 'W'),
     Team("Alemania", "🇩🇪", s = 'L'),
-)
+).mapIndexed { i, t -> t.copy(position = i) }
 
 /* Paleta de líneas para equipos que avanzan sin color asignado */
 val FALLBACK_COLORS = listOf(
     Color(0xFFD13A30), Color(0xFFF2C200), Color(0xFF1F9E4B), Color(0xFF3F5FB5)
 )
-
-/* ============================================================
- *  VIEWMODEL — los resultados viven aquí; la UI solo los pinta.
- *  registrarGanador(i): marca al equipo i como ganador de su
- *  llave y elimina a su rival, sin recompilar nada.
- * ============================================================ */
-class BracketViewModel : ViewModel() {
-    private val _teams = MutableStateFlow(INITIAL_TEAMS)
-    val teams: StateFlow<List<Team>> = _teams.asStateFlow()
-
-    fun registrarGanador(index: Int) {
-        val current = _teams.value
-        if (current[index].s != 'P') return          // solo llaves pendientes
-        val rival = if (index % 2 == 0) index + 1 else index - 1
-        _teams.value = current.mapIndexed { i, t ->
-            when (i) {
-                index -> t.copy(
-                    s = 'W',
-                    c = t.c ?: FALLBACK_COLORS[index % FALLBACK_COLORS.size],
-                    hora = null
-                )
-                rival -> t.copy(s = 'L', hora = null)
-                else -> t
-            }
-        }
-    }
-
-    fun reiniciar() { _teams.value = INITIAL_TEAMS }
-}
 
 /* ============================================================
  *  GEOMETRÍA — espacio virtual de 1700 x 1700, como el SVG
@@ -183,24 +158,27 @@ fun elbowPath(a1: Float, a2: Float, rA: Float, rB: Float, rC: Float): Path {
 /* ============================================================
  *  LÓGICA DE ESTADO
  * ============================================================ */
-fun rivalDeOctavos(teams: List<Team>, i: Int): Team? {
-    val k = i / 2
+fun rivalPar(position: Int) = if (position % 2 == 0) position + 1 else position - 1
+
+fun rivalDeOctavos(byPos: Map<Int, Team>, position: Int): Team? {
+    val k = position / 2
     val otherPair = (k / 2) * 2 + (1 - k % 2)
-    val a = teams[otherPair * 2]
-    val b = teams[otherPair * 2 + 1]
-    return if (a.s == 'W') a else if (b.s == 'W') b else null
+    val a = byPos[otherPair * 2]
+    val b = byPos[otherPair * 2 + 1]
+    return if (a?.s == 'W') a else if (b?.s == 'W') b else null
 }
 
-fun estado(teams: List<Team>, i: Int): String {
-    val t = teams[i]
+fun estado(byPos: Map<Int, Team>, position: Int): String {
+    val t = byPos[position] ?: return "Slot vacío."
     return when (t.s) {
         'L' -> "Eliminado en dieciseisavos de final."
         'P' -> {
-            val rival = teams[if (i % 2 == 0) i + 1 else i - 1]
+            val rival = byPos[rivalPar(position)]
             val cuando = t.hora?.let { " ($it)" } ?: ""
-            "Por jugar vs ${rival.f} ${rival.n}$cuando. Mantén presionada su bandera para marcarlo ganador."
+            if (rival != null) "Por jugar vs ${rival.f} ${rival.n}$cuando."
+            else "Por jugar · rival por definir$cuando."
         }
-        else -> rivalDeOctavos(teams, i)?.let { "Clasificado · Octavos vs ${it.f} ${it.n}." }
+        else -> rivalDeOctavos(byPos, position)?.let { "Clasificado · Octavos vs ${it.f} ${it.n}." }
             ?: "Clasificado a octavos · rival por definir."
     }
 }
@@ -213,54 +191,80 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { MaterialTheme { BracketScreen() } }
+        setContent {
+            MaterialTheme {
+                val navController = rememberNavController()
+                NavHost(navController = navController, startDestination = "bracket") {
+                    composable("bracket") {
+                        BracketScreen(onAbrirEquipos = { navController.navigate("equipos") })
+                    }
+                    composable("equipos") {
+                        EquiposScreen(onVolver = { navController.popBackStack() })
+                    }
+                }
+            }
+        }
     }
 }
 
-private data class FlagHit(val center: Offset, val radius: Float, val teamIndex: Int)
+private data class FlagHit(val center: Offset, val radius: Float, val position: Int)
 
 @Composable
-fun BracketScreen(vm: BracketViewModel = viewModel()) {
+fun BracketScreen(
+    onAbrirEquipos: () -> Unit,
+    vm: BracketViewModel = viewModel(factory = BracketViewModel.factory(LocalContext.current)),
+) {
     val teams by vm.teams.collectAsState()
+    val byPos = remember(teams) { teams.associateBy { it.position } }
 
     // ---- Pan & zoom animables ----
     val scale = remember { Animatable(1f) }
     val offset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<Int?>(null) }
+    var showResultDialog by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
 
     val textMeasurer = rememberTextMeasurer()
 
-    // Zonas tocables: dependen de qué equipos han avanzado
+    // Zonas tocables: solo slots con equipo asignado
     val hits = remember(teams) {
         buildList {
-            teams.forEachIndexed { i, t ->
-                add(FlagHit(pt(angTeam(i), R_TEAM), 42f, i))
-                if (t.s == 'W') add(FlagHit(pt(angPair(i / 2), R_N16 + 62f), 40f, i))
+            teams.forEach { t ->
+                add(FlagHit(pt(angTeam(t.position), R_TEAM), 42f, t.position))
+                if (t.s == 'W') add(FlagHit(pt(angPair(t.position / 2), R_N16 + 62f), 40f, t.position))
             }
         }
     }
 
     Column(Modifier.fillMaxSize().background(COL_BG).safeDrawingPadding()) {
-        Column(
-            Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                "CAMINO AL TÍTULO",
-                color = Color(0xFFE9DCC0),
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 4.sp,
-                fontSize = 18.sp
-            )
-            Text(
-                "EN JUEGO · OCTAVOS DE FINAL",
-                color = COL_GOLD,
-                fontSize = 11.sp,
-                letterSpacing = 3.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 6.dp)
-            )
+        Box(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp)) {
+            Column(
+                Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "CAMINO AL TÍTULO",
+                    color = Color(0xFFE9DCC0),
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 4.sp,
+                    fontSize = 18.sp
+                )
+                Text(
+                    "EN JUEGO · OCTAVOS DE FINAL",
+                    color = COL_GOLD,
+                    fontSize = 11.sp,
+                    letterSpacing = 3.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            IconButton(
+                onClick = onAbrirEquipos,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)
+            ) {
+                Icon(Icons.Filled.List, contentDescription = "Selecciones", tint = COL_GOLD)
+            }
         }
 
         Box(
@@ -280,7 +284,7 @@ fun BracketScreen(vm: BracketViewModel = viewModel()) {
                         }
                     }
                 }
-                // Tap: seleccionar · Long press: marcar ganador · Doble tap: zoom animado
+                // Tap: seleccionar · Doble tap: zoom animado
                 .pointerInput(hits) {
                     var lastTapTime = 0L
                     var lastTapPos = Offset.Zero
@@ -311,13 +315,6 @@ fun BracketScreen(vm: BracketViewModel = viewModel()) {
                                 val idx = hitTest(tap, size.width, size.height, scale.value, offset.value, hits)
                                 selected = if (idx == selected) null else idx
                             }
-                        },
-                        onLongPress = { tap ->
-                            val idx = hitTest(tap, size.width, size.height, scale.value, offset.value, hits)
-                            if (idx != null && teams[idx].s == 'P') {
-                                vm.registrarGanador(idx)
-                                selected = idx
-                            }
                         }
                     )
                 }
@@ -344,7 +341,7 @@ fun BracketScreen(vm: BracketViewModel = viewModel()) {
                     translate(fitOffset.x, fitOffset.y)
                     scale(fit, fit, pivot = Offset.Zero)
                 }) {
-                    drawBracket(textMeasurer, teams, selected)
+                    drawBracket(textMeasurer, byPos, selected)
                 }
             }
         }
@@ -362,8 +359,9 @@ fun BracketScreen(vm: BracketViewModel = viewModel()) {
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp).heightIn(min = 44.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val sel = selected
-                if (sel == null) {
+                val selTeam = selected?.let { byPos[it] }
+                val rivalTeam = selTeam?.let { byPos[rivalPar(it.position)] }
+                if (selTeam == null) {
                     Text(
                         "Toca una bandera para ver su estado · pellizca para acercar · doble tap para zoom",
                         color = Color(0xFF7D7060),
@@ -371,23 +369,101 @@ fun BracketScreen(vm: BracketViewModel = viewModel()) {
                         modifier = Modifier.weight(1f)
                     )
                 } else {
-                    Text(teams[sel].f, fontSize = 26.sp)
+                    Text(selTeam.f, fontSize = 26.sp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            teams[sel].n,
+                            selTeam.n,
                             color = Color(0xFFE9E2D4),
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp
                         )
-                        Text(estado(teams, sel), color = Color(0xFFBDA87E), fontSize = 12.sp)
+                        Text(estado(byPos, selTeam.position), color = Color(0xFFBDA87E), fontSize = 12.sp)
+                    }
+                    if (selTeam.s == 'P' && rivalTeam != null) {
+                        TextButton(onClick = { showResultDialog = true }) {
+                            Text("Registrar resultado", color = COL_GOLD, fontSize = 12.sp)
+                        }
                     }
                 }
-                TextButton(onClick = { vm.reiniciar(); selected = null }) {
+                TextButton(onClick = { showResetConfirm = true }) {
                     Text("Reiniciar", color = COL_GOLD, fontSize = 12.sp)
                 }
             }
         }
+    }
+
+    if (showResultDialog) {
+        val selTeam = selected?.let { byPos[it] }
+        val rivalTeam = selTeam?.let { byPos[rivalPar(it.position)] }
+        if (selTeam != null && rivalTeam != null) {
+            AlertDialog(
+                onDismissRequest = { showResultDialog = false },
+                containerColor = Color(0xFF211A11),
+                title = { Text("¿Quién ganó?", color = Color(0xFFE9E2D4), fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        listOf(selTeam, rivalTeam).forEach { candidato ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        vm.registrarGanador(candidato.position)
+                                        selected = candidato.position
+                                        showResultDialog = false
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(candidato.f, fontSize = 28.sp)
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    candidato.n,
+                                    color = Color(0xFFE9E2D4),
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showResultDialog = false }) {
+                        Text("Cancelar", color = COL_GOLD)
+                    }
+                }
+            )
+        } else {
+            showResultDialog = false
+        }
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            containerColor = Color(0xFF211A11),
+            title = { Text("¿Reiniciar el bracket?", color = Color(0xFFE9E2D4), fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Se restaurarán los 32 equipos y resultados iniciales.",
+                    color = Color(0xFFBDA87E)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.reiniciar()
+                    selected = null
+                    showResetConfirm = false
+                }) {
+                    Text("Reiniciar", color = COL_GOLD)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text("Cancelar", color = Color(0xFF7D7060))
+                }
+            }
+        )
     }
 }
 
@@ -400,7 +476,7 @@ private fun hitTest(
     val p = ((tap - offset) / scale - fitOffset) / fit
     return hits.firstOrNull {
         hypot(p.x - it.center.x, p.y - it.center.y) <= it.radius + 14f
-    }?.teamIndex
+    }?.position
 }
 
 /* ============================================================
@@ -408,7 +484,7 @@ private fun hitTest(
  * ============================================================ */
 private fun DrawScope.drawBracket(
     textMeasurer: TextMeasurer,
-    teams: List<Team>,
+    byPos: Map<Int, Team>,
     selected: Int?,
 ) {
     fun stroke(w: Float, dash: Boolean = false) = Stroke(
@@ -436,11 +512,12 @@ private fun DrawScope.drawBracket(
     /* Llaves de dieciseisavos */
     for (k in 0 until 16) {
         val iA = 2 * k; val iB = 2 * k + 1
-        val a = teams[iA]; val b = teams[iB]
-        val decided = a.s != 'P'
+        val a = byPos[iA]; val b = byPos[iB]
+        val decided = (a != null && a.s != 'P') || (b != null && b.s != 'P')
         for ((i, t) in listOf(iA to a, iB to b)) {
-            val won = t.s == 'W'
+            val won = t?.s == 'W'
             val color = when {
+                t == null -> COL_LINE
                 won -> t.c ?: COL_GOLD
                 decided -> COL_LINE_SOFT
                 else -> COL_LINE
@@ -453,7 +530,7 @@ private fun DrawScope.drawBracket(
         }
         dotAt(angPair(k), R_N32, 7f, if (decided) Color(0xFF7A6A50) else COL_DOT)
 
-        val winner = if (a.s == 'W') iA else if (b.s == 'W') iB else null
+        val winner = if (a?.s == 'W') iA else if (b?.s == 'W') iB else null
         val advance = elbowPath(angPair(k), angSect(k / 2), R_N32, R_ARC2, R_N16)
         if (winner != null) {
             drawPath(advance, COL_GOLD_SOFT, style = stroke(if (selected == winner) 8f else 5f))
@@ -474,7 +551,12 @@ private fun DrawScope.drawBracket(
     drawTrophy()
 
     /* Banderas y etiquetas */
-    teams.forEachIndexed { i, t ->
+    for (i in 0 until 32) {
+        val t = byPos[i]
+        if (t == null) {
+            drawEmptySlot(textMeasurer, pt(angTeam(i), R_TEAM), 42f)
+            continue
+        }
         val out = t.s == 'L'
         drawFlag(textMeasurer, pt(angTeam(i), R_TEAM), 42f, t, out, selected == i)
 
@@ -530,6 +612,22 @@ private fun DrawScope.drawFlag(
         else -> team.c ?: Color(0xFF6B5C45)
     }
     drawCircle(ring, radius, center, style = Stroke(if (isSelected) 6f else if (out) 2f else 3f))
+}
+
+/** Slot de bracket sin equipo asignado: círculo punteado gris con "?". */
+private fun DrawScope.drawEmptySlot(textMeasurer: TextMeasurer, center: Offset, radius: Float) {
+    drawCircle(Color(0xFF0F0C08), radius, center)
+    drawCircle(
+        COL_DOT,
+        radius,
+        center,
+        style = Stroke(width = 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+    )
+    val q = textMeasurer.measure(
+        AnnotatedString("?"),
+        style = TextStyle(color = COL_DOT, fontSize = (radius * 0.9f).sp, fontWeight = FontWeight.Bold)
+    )
+    drawText(q, topLeft = Offset(center.x - q.size.width / 2f, center.y - q.size.height / 2f))
 }
 
 /** Trofeo dorado estilizado en el centro. */
