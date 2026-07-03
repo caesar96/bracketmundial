@@ -1,8 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
+
+// El token de football-data.org se lee de local.properties (no versionado) y se
+// expone como BuildConfig.FOOTBALLDATA_TOKEN; nunca se hardcodea en el código.
+// Sin token, SyncRepository usa automáticamente el fallback openfootball (sin key).
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(FileInputStream(file))
+}
+val footballDataToken: String = localProperties.getProperty("FOOTBALLDATA_TOKEN", "")
 
 android {
     namespace = "com.example.bracketmundial"
@@ -20,6 +33,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "FOOTBALLDATA_TOKEN", "\"$footballDataToken\"")
     }
 
     buildTypes {
@@ -35,6 +49,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -54,6 +69,11 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.kotlinx.serialization)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.work.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

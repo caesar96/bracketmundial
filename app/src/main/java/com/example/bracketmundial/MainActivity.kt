@@ -2,10 +2,16 @@
 
 package com.example.bracketmundial
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -19,7 +25,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +55,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.bracketmundial.work.SyncScheduler
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -228,13 +237,32 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
+                val context = LocalContext.current
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { /* si se niega, el worker simplemente no podrá notificar */ }
+                LaunchedEffect(Unit) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    SyncScheduler.schedule(context)
+                }
+
                 val navController = rememberNavController()
                 NavHost(navController = navController, startDestination = "bracket") {
                     composable("bracket") {
-                        BracketScreen(onAbrirEquipos = { navController.navigate("equipos") })
+                        BracketScreen(
+                            onAbrirEquipos = { navController.navigate("equipos") },
+                            onAbrirResultadosApi = { navController.navigate("resultadosApi") },
+                        )
                     }
                     composable("equipos") {
                         EquiposScreen(onVolver = { navController.popBackStack() })
+                    }
+                    composable("resultadosApi") {
+                        ResultadosApiScreen(onVolver = { navController.popBackStack() })
                     }
                 }
             }
@@ -247,10 +275,14 @@ private data class FlagHit(val center: Offset, val radius: Float, val position: 
 @Composable
 fun BracketScreen(
     onAbrirEquipos: () -> Unit,
+    onAbrirResultadosApi: () -> Unit,
     vm: BracketViewModel = viewModel(factory = BracketViewModel.factory(LocalContext.current)),
 ) {
     val teams by vm.teams.collectAsState()
     val byPos = remember(teams) { teams.associateBy { it.position } }
+    val isSyncing by vm.isSyncing.collectAsState()
+    val syncMessage by vm.syncMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // ---- Pan & zoom animables ----
     val scale = remember { Animatable(1f) }
@@ -260,6 +292,13 @@ fun BracketScreen(
     var showResultDialog by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showUndoConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(syncMessage) {
+        syncMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            vm.limpiarMensajeSync()
+        }
+    }
 
     val textMeasurer = rememberTextMeasurer()
 
@@ -279,7 +318,8 @@ fun BracketScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(COL_BG).safeDrawingPadding()) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(COL_BG).safeDrawingPadding()) {
         Box(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp)) {
             Column(
                 Modifier.fillMaxWidth(),
@@ -301,11 +341,27 @@ fun BracketScreen(
                     modifier = Modifier.padding(top = 6.dp)
                 )
             }
-            IconButton(
-                onClick = onAbrirEquipos,
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.List, contentDescription = "Selecciones", tint = COL_GOLD)
+                if (isSyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp).padding(end = 12.dp),
+                        color = COL_GOLD,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    IconButton(onClick = { vm.refresh() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Actualizar resultados", tint = COL_GOLD)
+                    }
+                }
+                IconButton(onClick = onAbrirResultadosApi) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = "Resultados (API)", tint = COL_GOLD)
+                }
+                IconButton(onClick = onAbrirEquipos) {
+                    Icon(Icons.Filled.List, contentDescription = "Selecciones", tint = COL_GOLD)
+                }
             }
         }
 
@@ -455,6 +511,9 @@ fun BracketScreen(
                 }
             }
         }
+    }
+
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
     if (showResultDialog) {
