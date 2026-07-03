@@ -1,0 +1,11 @@
+# Copia este archivo a local.properties (que está en .gitignore, nunca se sube)
+# y completa tus valores reales.
+
+# Ruta al Android SDK. Android Studio la rellena solo la primera vez que
+# abres el proyecto; normalmente no hace falta tocarla a mano.
+sdk.dir=/ruta/a/tu/Android/Sdk
+
+# Token gratuito de football-data.org (https://www.football-data.org/client/register)
+# para sincronizar resultados reales del Mundial. Sin este token, la app usa
+# automáticamente el fallback openfootball (sin key, se actualiza ~1 vez al día).
+FOOTBALLDATA_TOKEN=tu_token_aqui
