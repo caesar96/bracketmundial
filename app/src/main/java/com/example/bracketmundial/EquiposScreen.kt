@@ -29,15 +29,15 @@ private val COL_TEXT_CREAM = Color(0xFFE9E2D4)
 private val COL_TEXT_DIM = Color(0xFF7D7060)
 private val COL_DANGER = Color(0xFFD13A30)
 
-private fun estadoTexto(s: Char) = when (s) {
-    'W' -> "Clasificado"
-    'L' -> "Eliminado"
-    else -> "Por jugar"
+private fun estadoTexto(t: Team) = when {
+    t.eliminated -> "Eliminado"
+    t.wins >= 5 -> "Campeón"
+    else -> "Ronda: ${nombreRonda(t.wins)}"
 }
 
-private fun estadoColor(s: Char) = when (s) {
-    'W' -> COL_GOLD
-    'L' -> COL_DANGER
+private fun estadoColor(t: Team) = when {
+    t.eliminated -> COL_DANGER
+    t.wins >= 5 -> COL_GOLD
     else -> COL_TEXT_DIM
 }
 
@@ -131,10 +131,10 @@ fun EquiposScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
-                            val color = estadoColor(team.s)
+                            val color = estadoColor(team)
                             AssistChip(
                                 onClick = {},
-                                label = { Text(estadoTexto(team.s), fontSize = 10.sp, color = color) },
+                                label = { Text(estadoTexto(team), fontSize = 10.sp, color = color) },
                                 colors = AssistChipDefaults.assistChipColors(
                                     containerColor = color.copy(alpha = 0.15f),
                                     labelColor = color
@@ -160,13 +160,13 @@ fun EquiposScreen(
             titulo = "Editar equipo",
             equipoEnEdicion = team,
             onDismiss = { teamParaEditar = null },
-            onConfirmar = { nombre, bandera, estado ->
+            onConfirmar = { nombre, bandera, eliminado ->
                 vm.guardarEquipo(
                     team.copy(
                         n = nombre,
                         f = bandera,
-                        s = estado,
-                        hora = if (estado == 'P') team.hora else null
+                        eliminated = eliminado,
+                        hora = if (eliminado) null else team.hora
                     )
                 )
                 teamParaEditar = null
@@ -179,8 +179,8 @@ fun EquiposScreen(
             titulo = "Agregar equipo (slot $freeSlot)",
             equipoEnEdicion = null,
             onDismiss = { mostrandoAgregar = false },
-            onConfirmar = { nombre, bandera, estado ->
-                vm.guardarEquipo(Team(n = nombre, f = bandera, s = estado, position = freeSlot))
+            onConfirmar = { nombre, bandera, eliminado ->
+                vm.guardarEquipo(Team(n = nombre, f = bandera, eliminated = eliminado, position = freeSlot))
                 mostrandoAgregar = false
             }
         )
@@ -216,11 +216,11 @@ private fun EquipoDialog(
     titulo: String,
     equipoEnEdicion: Team?,
     onDismiss: () -> Unit,
-    onConfirmar: (nombre: String, bandera: String, estado: Char) -> Unit,
+    onConfirmar: (nombre: String, bandera: String, eliminado: Boolean) -> Unit,
 ) {
     var nombre by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.n ?: "") }
     var bandera by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.f ?: "") }
-    var estado by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.s ?: 'P') }
+    var eliminado by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.eliminated ?: false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -246,20 +246,25 @@ private fun EquipoDialog(
                     modifier = Modifier.width(140.dp)
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf('W' to "Clasificado", 'L' to "Eliminado", 'P' to "Por jugar").forEach { (valor, label) ->
-                        FilterChip(
-                            selected = estado == valor,
-                            onClick = { estado = valor },
-                            label = { Text(label, fontSize = 11.sp) }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Eliminado", color = COL_TEXT_CREAM, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = eliminado,
+                        onCheckedChange = { eliminado = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = COL_GOLD,
+                            checkedTrackColor = COL_GOLD.copy(alpha = 0.5f)
                         )
-                    }
+                    )
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirmar(nombre.trim(), bandera.trim(), estado) },
+                onClick = { onConfirmar(nombre.trim(), bandera.trim(), eliminado) },
                 enabled = nombre.isNotBlank() && bandera.isNotBlank()
             ) { Text("Guardar", color = COL_GOLD) }
         },

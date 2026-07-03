@@ -18,9 +18,18 @@ interface TeamDao {
     @Delete
     suspend fun delete(team: TeamEntity)
 
-    @Query("UPDATE teams SET status = :status, hora = NULL WHERE position = :position")
-    suspend fun setStatus(position: Int, status: String)
+    @Query("UPDATE teams SET wins = wins + 1, hora = NULL WHERE position = :position")
+    suspend fun avanzar(position: Int)
+
+    @Query("UPDATE teams SET eliminated = 1, hora = NULL WHERE position = :position")
+    suspend fun eliminar(position: Int)
 
     @Query("UPDATE teams SET colorArgb = :color WHERE position = :position")
     suspend fun setColor(position: Int, color: Long)
+
+    @Query("UPDATE teams SET wins = wins - 1 WHERE position = :position AND wins > 0")
+    suspend fun retroceder(position: Int)
+
+    @Query("UPDATE teams SET eliminated = 0 WHERE position = :position")
+    suspend fun revivir(position: Int)
 }

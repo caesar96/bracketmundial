@@ -18,8 +18,8 @@ import kotlinx.coroutines.launch
 
 /* ============================================================
  *  VIEWMODEL — los resultados viven en Room; la UI solo los pinta.
- *  registrarGanador(position): marca al equipo de ese slot como
- *  ganador de su llave y elimina a su rival adyacente.
+ *  registrarGanador(ganador, perdedor): avanza al ganador una ronda
+ *  (wins++) y elimina al perdedor, para cualquier ronda del torneo.
  * ============================================================ */
 class BracketViewModel(private val dao: TeamDao) : ViewModel() {
 
@@ -31,18 +31,23 @@ class BracketViewModel(private val dao: TeamDao) : ViewModel() {
         viewModelScope.launch { dao.seedIfEmpty() }
     }
 
-    fun registrarGanador(position: Int) {
+    fun registrarGanador(ganadorPos: Int, perdedorPos: Int) {
+        viewModelScope.launch {
+            val ganador = teams.value.firstOrNull { it.position == ganadorPos } ?: return@launch
+            if (ganador.c == null) {
+                dao.setColor(ganadorPos, FALLBACK_COLORS[ganadorPos % FALLBACK_COLORS.size].value.toLong())
+            }
+            dao.avanzar(ganadorPos)
+            dao.eliminar(perdedorPos)
+        }
+    }
+
+    fun deshacerResultado(pos: Int) {
         viewModelScope.launch {
             val byPos = teams.value.associateBy { it.position }
-            val t = byPos[position] ?: return@launch
-            if (t.s != 'P') return@launch          // solo llaves pendientes
-            val rivalPos = if (position % 2 == 0) position + 1 else position - 1
-            byPos[rivalPos] ?: return@launch        // sin rival definido, no se puede resolver
-            if (t.c == null) {
-                dao.setColor(position, FALLBACK_COLORS[position % FALLBACK_COLORS.size].value.toLong())
-            }
-            dao.setStatus(position, "W")
-            dao.setStatus(rivalPos, "L")
+            val vencido = rivalVencido(byPos, pos) ?: return@launch
+            dao.retroceder(pos)
+            dao.revivir(vencido.position)
         }
     }
 

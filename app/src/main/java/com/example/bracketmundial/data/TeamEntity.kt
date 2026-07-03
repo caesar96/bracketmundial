@@ -11,7 +11,8 @@ data class TeamEntity(
     val name: String,
     val flag: String,
     val colorArgb: Long?,
-    val status: String,
+    val wins: Int,
+    val eliminated: Boolean,
     val hora: String?,
 )
 
@@ -19,7 +20,8 @@ fun TeamEntity.toTeam(): Team = Team(
     n = name,
     f = flag,
     c = colorArgb?.let { Color(it.toULong()) },
-    s = status.first(),
+    wins = wins,
+    eliminated = eliminated,
     hora = hora,
     position = position,
 )
@@ -29,6 +31,7 @@ fun Team.toEntity(): TeamEntity = TeamEntity(
     name = n,
     flag = f,
     colorArgb = c?.value?.toLong(),
-    status = s.toString(),
+    wins = wins,
+    eliminated = eliminated,
     hora = hora,
 )
