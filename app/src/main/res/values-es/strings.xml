@@ -1,0 +1,116 @@
+<resources>
+    <string name="app_name">Bracket Mundial</string>
+
+    <!-- Nombres de equipos -->
+    <string name="team_brazil">Brasil</string>
+    <string name="team_japan">Japón</string>
+    <string name="team_ivory_coast">C. de Marfil</string>
+    <string name="team_norway">Noruega</string>
+    <string name="team_mexico">México</string>
+    <string name="team_ecuador">Ecuador</string>
+    <string name="team_england">Inglaterra</string>
+    <string name="team_dr_congo">RD Congo</string>
+    <string name="team_argentina">Argentina</string>
+    <string name="team_cape_verde">Cabo Verde</string>
+    <string name="team_australia">Australia</string>
+    <string name="team_egypt">Egipto</string>
+    <string name="team_switzerland">Suiza</string>
+    <string name="team_algeria">Argelia</string>
+    <string name="team_colombia">Colombia</string>
+    <string name="team_ghana">Ghana</string>
+    <string name="team_senegal">Senegal</string>
+    <string name="team_belgium">Bélgica</string>
+    <string name="team_bosnia">Bosnia</string>
+    <string name="team_usa">EE. UU.</string>
+    <string name="team_austria">Austria</string>
+    <string name="team_spain">España</string>
+    <string name="team_croatia">Croacia</string>
+    <string name="team_portugal">Portugal</string>
+    <string name="team_morocco">Marruecos</string>
+    <string name="team_south_africa">Sudáfrica</string>
+    <string name="team_netherlands">Países Bajos</string>
+    <string name="team_canada">Canadá</string>
+    <string name="team_sweden">Suecia</string>
+    <string name="team_france">Francia</string>
+    <string name="team_paraguay">Paraguay</string>
+    <string name="team_germany">Alemania</string>
+
+    <!-- Nombres de rondas -->
+    <string name="round_of_32">Dieciseisavos</string>
+    <string name="round_of_16">Octavos</string>
+    <string name="round_quarterfinals">Cuartos</string>
+    <string name="round_semifinals">Semis</string>
+    <string name="round_final">Final</string>
+    <string name="round_champion">Campeón</string>
+
+    <!-- Encabezado del bracket -->
+    <string name="header_title">CAMINO AL TÍTULO</string>
+    <string name="header_subtitle">EN JUEGO · OCTAVOS DE FINAL</string>
+    <string name="bracket_hint">Toca una bandera para ver su estado · pellizca para acercar · doble tap para zoom</string>
+    <string name="no_free_slots_snackbar">No hay slots libres (0-31 ocupados)</string>
+
+    <!-- Acciones comunes -->
+    <string name="action_undo">Deshacer</string>
+    <string name="action_record_result">Registrar resultado</string>
+    <string name="action_reset">Reiniciar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_confirm">Confirmar</string>
+    <string name="action_save">Guardar</string>
+    <string name="action_delete">Eliminar</string>
+    <string name="action_teams">Selecciones</string>
+    <string name="action_api_results">Resultados (API)</string>
+
+    <!-- Descripciones de contenido -->
+    <string name="cd_refresh_results">Actualizar resultados</string>
+    <string name="cd_menu">Menú</string>
+    <string name="cd_back">Volver</string>
+    <string name="cd_add_team">Agregar equipo</string>
+    <string name="cd_edit">Editar</string>
+    <string name="cd_delete">Eliminar</string>
+    <string name="cd_reload">Recargar</string>
+
+    <!-- Diálogos del bracket -->
+    <string name="dialog_who_won_title">¿Quién ganó?</string>
+    <string name="dialog_undo_title">¿Deshacer resultado?</string>
+    <string name="dialog_undo_message">¿Deshacer la victoria de %1$s sobre %2$s %3$s?</string>
+    <string name="dialog_reset_title">¿Reiniciar el bracket?</string>
+    <string name="dialog_reset_message">Se restaurarán los 32 equipos y resultados iniciales.</string>
+
+    <!-- Texto de estado dinámico -->
+    <string name="status_empty_slot">Slot vacío.</string>
+    <string name="status_eliminated_in">Eliminado en %1$s.</string>
+    <string name="status_champion">¡CAMPEÓN DEL MUNDO!</string>
+    <string name="status_vs">%1$s vs %2$s %3$s%4$s.</string>
+    <string name="status_rival_tbd">%1$s · rival por definir%2$s.</string>
+    <string name="status_schedule_today">Hoy · %1$s</string>
+    <string name="status_eliminated">Eliminado</string>
+    <string name="status_round_label">Ronda: %1$s</string>
+
+    <!-- Pantalla de selecciones -->
+    <string name="dialog_edit_team_title">Editar equipo</string>
+    <string name="dialog_add_team_title">Agregar equipo (slot %1$d)</string>
+    <string name="field_name_label">Nombre</string>
+    <string name="field_flag_label">Bandera (emoji)</string>
+    <string name="dialog_delete_team_title">¿Eliminar equipo?</string>
+    <string name="dialog_delete_team_message">Se eliminará %1$s %2$s del slot %3$d.</string>
+
+    <!-- Pantalla de diagnóstico de resultados API -->
+    <string name="api_results_empty">La fuente activa no devolvió partidos de eliminatorias todavía.</string>
+    <string name="api_results_source">Fuente: %1$s</string>
+    <string name="provider_name_openfootball">openfootball (datos ~1 vez al día)</string>
+
+    <!-- Mensajes de sincronización -->
+    <string name="sync_no_new_results">sin resultados nuevos</string>
+    <string name="sync_one_new_result">1 resultado nuevo</string>
+    <string name="sync_new_results_count">%1$d resultados nuevos</string>
+
+    <!-- Errores de sincronización/red -->
+    <string name="error_no_internet">Sin conexión a internet</string>
+    <string name="error_invalid_token">Token inválido</string>
+    <string name="error_rate_limit">Límite de solicitudes alcanzado</string>
+    <string name="error_server">Error del servidor (%1$d)</string>
+
+    <!-- Notificaciones -->
+    <string name="notification_channel_name">Resultados del Mundial</string>
+    <string name="notification_title">¡Nuevos resultados!</string>
+</resources>

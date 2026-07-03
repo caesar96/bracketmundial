@@ -14,13 +14,14 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.bracketmundial.MainActivity
+import com.example.bracketmundial.R
 import com.example.bracketmundial.data.AppDatabase
 import com.example.bracketmundial.data.SyncRepository
 import java.time.LocalTime
 
-private const val CANAL_ID = "resultados"
-private const val NOTIFICACION_ID = 1001
-private val HORARIO_ACTIVO = 10..21 // 10:00-22:00, para cuidar la cuota gratuita de la API
+private const val CHANNEL_ID = "results"
+private const val NOTIFICATION_ID = 1001
+private val ACTIVE_HOURS = 10..21 // 10:00-22:00, to protect the API's free quota
 
 class ResultSyncWorker(
     context: Context,
@@ -28,44 +29,44 @@ class ResultSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        if (LocalTime.now().hour !in HORARIO_ACTIVO) return Result.success()
+        if (LocalTime.now().hour !in ACTIVE_HOURS) return Result.success()
 
         val dao = AppDatabase.getInstance(applicationContext).teamDao()
-        val resultado = SyncRepository(dao).sync()
-        if (resultado.reintentable) return Result.retry()
+        val result = SyncRepository(applicationContext, dao).sync()
+        if (result.retryable) return Result.retry()
 
-        if (resultado.aplicados.isNotEmpty()) notificar(resultado.aplicados)
+        if (result.applied.isNotEmpty()) sendNotification(result.applied)
         return Result.success()
     }
 
-    private fun notificar(aplicados: List<String>) {
+    private fun sendNotification(applied: List<String>) {
         val context = applicationContext
-        crearCanalSiHaceFalta(context)
+        createChannelIfNeeded(context)
 
-        val abrirApp = PendingIntent.getActivity(
+        val openApp = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val texto = aplicados.joinToString("\n")
-        val notificacion = NotificationCompat.Builder(context, CANAL_ID)
+        val body = applied.joinToString("\n")
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
-            .setContentTitle("¡Nuevos resultados!")
-            .setContentText(aplicados.first())
-            .setStyle(NotificationCompat.BigTextStyle().bigText(texto))
-            .setContentIntent(abrirApp)
+            .setContentTitle(context.getString(R.string.notification_title))
+            .setContentText(applied.first())
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(openApp)
             .setAutoCancel(true)
             .build()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         ) {
-            NotificationManagerCompat.from(context).notify(NOTIFICACION_ID, notificacion)
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
         }
     }
 
-    private fun crearCanalSiHaceFalta(context: Context) {
-        val canal = NotificationChannel(CANAL_ID, "Resultados del Mundial", NotificationManager.IMPORTANCE_DEFAULT)
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
+    private fun createChannelIfNeeded(context: Context) {
+        val channel = NotificationChannel(CHANNEL_ID, context.getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_DEFAULT)
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 }

@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 private const val WORK_NAME = "result_sync_worker"
 
-/** Encola el chequeo periódico de resultados (cada 15 min, el mínimo permitido). */
+/** Enqueues the periodic results check (every 15 min, the minimum allowed). */
 object SyncScheduler {
     fun schedule(context: Context) {
         val constraints = Constraints.Builder()

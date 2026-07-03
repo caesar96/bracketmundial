@@ -14,13 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.bracketmundial.data.ApiResultsUiState
+import com.example.bracketmundial.data.ApiResultsViewModel
 import com.example.bracketmundial.data.MatchResult
-import com.example.bracketmundial.data.ResultadosApiViewModel
-import com.example.bracketmundial.data.ResultadosUiState
 
 private val COL_CARD = Color(0xFF211A11)
 private val COL_CARD_BORDER = Color(0xFF453923)
@@ -29,25 +30,25 @@ private val COL_TEXT_DIM = Color(0xFF7D7060)
 private val COL_DANGER = Color(0xFFD13A30)
 
 @Composable
-fun ResultadosApiScreen(
-    onVolver: () -> Unit,
-    vm: ResultadosApiViewModel = viewModel(),
+fun ApiResultsScreen(
+    onBack: () -> Unit,
+    vm: ApiResultsViewModel = viewModel(),
 ) {
-    val estado by vm.estado.collectAsState()
+    val state by vm.state.collectAsState()
 
     Scaffold(
         containerColor = COL_BG,
         topBar = {
             TopAppBar(
-                title = { Text("Resultados (API)", color = COL_TEXT_CREAM) },
+                title = { Text(stringResource(R.string.action_api_results), color = COL_TEXT_CREAM) },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = COL_GOLD)
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back), tint = COL_GOLD)
                     }
                 },
                 actions = {
-                    IconButton(onClick = { vm.cargar() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Recargar", tint = COL_GOLD)
+                    IconButton(onClick = { vm.load() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cd_reload), tint = COL_GOLD)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = COL_CARD)
@@ -55,47 +56,47 @@ fun ResultadosApiScreen(
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (val s = estado) {
-                is ResultadosUiState.Cargando -> CircularProgressIndicator(
+            when (val s = state) {
+                is ApiResultsUiState.Loading -> CircularProgressIndicator(
                     color = COL_GOLD,
                     modifier = Modifier.align(Alignment.Center)
                 )
-                is ResultadosUiState.Error -> Text(
-                    s.mensaje,
+                is ApiResultsUiState.Error -> Text(
+                    s.message,
                     color = COL_DANGER,
                     modifier = Modifier.align(Alignment.Center).padding(32.dp)
                 )
-                is ResultadosUiState.Vacio -> Text(
-                    "La fuente activa no devolvió partidos de eliminatorias todavía.",
+                is ApiResultsUiState.Empty -> Text(
+                    stringResource(R.string.api_results_empty),
                     color = COL_TEXT_DIM,
                     modifier = Modifier.align(Alignment.Center).padding(32.dp)
                 )
-                is ResultadosUiState.Datos -> ListaPartidos(s.fuente, s.partidos)
+                is ApiResultsUiState.Data -> MatchList(s.source, s.matches)
             }
         }
     }
 }
 
 @Composable
-private fun ListaPartidos(fuente: String, partidos: List<MatchResult>) {
+private fun MatchList(source: String, matches: List<MatchResult>) {
     LazyColumn(contentPadding = PaddingValues(16.dp)) {
         item {
             Text(
-                "Fuente: $fuente",
+                stringResource(R.string.api_results_source, source),
                 color = COL_GOLD,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
         }
-        items(partidos, key = { it.summary }) { partido ->
+        items(matches, key = { it.summary }) { match ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = COL_CARD),
                 border = BorderStroke(1.dp, COL_CARD_BORDER),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
             ) {
                 Text(
-                    partido.summary,
+                    match.summary,
                     color = COL_TEXT_CREAM,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(12.dp)

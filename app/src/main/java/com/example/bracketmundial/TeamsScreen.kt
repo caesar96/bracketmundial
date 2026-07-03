@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,20 +30,21 @@ private val COL_TEXT_CREAM = Color(0xFFE9E2D4)
 private val COL_TEXT_DIM = Color(0xFF7D7060)
 private val COL_DANGER = Color(0xFFD13A30)
 
-private fun estadoTexto(t: Team) = when {
-    t.eliminated -> "Eliminado"
-    t.wins >= 5 -> "Campeón"
-    else -> "Ronda: ${nombreRonda(t.wins)}"
+@Composable
+private fun teamStatusText(t: Team): String = when {
+    t.eliminated -> stringResource(R.string.status_eliminated)
+    t.wins >= 5 -> stringResource(R.string.round_champion)
+    else -> stringResource(R.string.status_round_label, roundName(t.wins))
 }
 
-private fun estadoColor(t: Team) = when {
+private fun statusColor(t: Team) = when {
     t.eliminated -> COL_DANGER
     t.wins >= 5 -> COL_GOLD
     else -> COL_TEXT_DIM
 }
 
 @Composable
-private fun campoColors() = OutlinedTextFieldDefaults.colors(
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = COL_TEXT_CREAM,
     unfocusedTextColor = COL_TEXT_CREAM,
     cursorColor = COL_GOLD,
@@ -53,21 +55,22 @@ private fun campoColors() = OutlinedTextFieldDefaults.colors(
 )
 
 @Composable
-fun EquiposScreen(
-    onVolver: () -> Unit,
+fun TeamsScreen(
+    onBack: () -> Unit,
     vm: BracketViewModel = viewModel(factory = BracketViewModel.factory(LocalContext.current)),
 ) {
     val teams by vm.teams.collectAsState()
 
-    var teamParaEditar by remember { mutableStateOf<Team?>(null) }
-    var mostrandoAgregar by remember { mutableStateOf(false) }
-    var teamParaEliminar by remember { mutableStateOf<Team?>(null) }
+    var teamBeingEdited by remember { mutableStateOf<Team?>(null) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var teamToDelete by remember { mutableStateOf<Team?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val noFreeSlotsMessage = stringResource(R.string.no_free_slots_snackbar)
 
     val freeSlot = remember(teams) {
-        val usadas = teams.map { it.position }.toSet()
-        (0..31).firstOrNull { it !in usadas }
+        val used = teams.map { it.position }.toSet()
+        (0..31).firstOrNull { it !in used }
     }
 
     Scaffold(
@@ -75,10 +78,10 @@ fun EquiposScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Selecciones", color = COL_TEXT_CREAM) },
+                title = { Text(stringResource(R.string.action_teams), color = COL_TEXT_CREAM) },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = COL_GOLD)
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back), tint = COL_GOLD)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = COL_CARD)
@@ -88,15 +91,15 @@ fun EquiposScreen(
             FloatingActionButton(
                 onClick = {
                     if (freeSlot == null) {
-                        scope.launch { snackbarHostState.showSnackbar("No hay slots libres (0-31 ocupados)") }
+                        scope.launch { snackbarHostState.showSnackbar(noFreeSlotsMessage) }
                     } else {
-                        mostrandoAgregar = true
+                        showAddDialog = true
                     }
                 },
                 containerColor = if (freeSlot == null) Color(0xFF453C30) else COL_GOLD,
                 contentColor = if (freeSlot == null) COL_TEXT_DIM else Color(0xFF17130E)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Agregar equipo")
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.cd_add_team))
             }
         }
     ) { padding ->
@@ -126,15 +129,15 @@ fun EquiposScreen(
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
                             Text(
-                                team.n,
+                                displayName(team),
                                 color = COL_TEXT_CREAM,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
-                            val color = estadoColor(team)
+                            val color = statusColor(team)
                             AssistChip(
                                 onClick = {},
-                                label = { Text(estadoTexto(team), fontSize = 10.sp, color = color) },
+                                label = { Text(teamStatusText(team), fontSize = 10.sp, color = color) },
                                 colors = AssistChipDefaults.assistChipColors(
                                     containerColor = color.copy(alpha = 0.15f),
                                     labelColor = color
@@ -143,11 +146,11 @@ fun EquiposScreen(
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }
-                        IconButton(onClick = { teamParaEditar = team }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Editar", tint = COL_GOLD)
+                        IconButton(onClick = { teamBeingEdited = team }) {
+                            Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.cd_edit), tint = COL_GOLD)
                         }
-                        IconButton(onClick = { teamParaEliminar = team }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Eliminar", tint = COL_DANGER)
+                        IconButton(onClick = { teamToDelete = team }) {
+                            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.cd_delete), tint = COL_DANGER)
                         }
                     }
                 }
@@ -155,56 +158,62 @@ fun EquiposScreen(
         }
     }
 
-    teamParaEditar?.let { team ->
-        EquipoDialog(
-            titulo = "Editar equipo",
-            equipoEnEdicion = team,
-            onDismiss = { teamParaEditar = null },
-            onConfirmar = { nombre, bandera, eliminado ->
-                vm.guardarEquipo(
+    teamBeingEdited?.let { team ->
+        // The name the user would see right now for this team's recognized country (if any).
+        // If they save that value unchanged, the countryKey (and its live translation) is kept;
+        // if they type something else, it's treated as an explicit custom rename and cleared.
+        val expectedName = team.countryKey?.let { COUNTRY_NAME_RES[it] }?.let { stringResource(it) }
+        TeamDialog(
+            title = stringResource(R.string.dialog_edit_team_title),
+            teamBeingEdited = team,
+            onDismiss = { teamBeingEdited = null },
+            onConfirm = { name, flag, eliminated ->
+                val newCountryKey = if (name == expectedName) team.countryKey else null
+                vm.saveTeam(
                     team.copy(
-                        n = nombre,
-                        f = bandera,
-                        eliminated = eliminado,
-                        hora = if (eliminado) null else team.hora
+                        n = name,
+                        f = flag,
+                        eliminated = eliminated,
+                        matchTime = if (eliminated) null else team.matchTime,
+                        countryKey = newCountryKey,
                     )
                 )
-                teamParaEditar = null
+                teamBeingEdited = null
             }
         )
     }
 
-    if (mostrandoAgregar && freeSlot != null) {
-        EquipoDialog(
-            titulo = "Agregar equipo (slot $freeSlot)",
-            equipoEnEdicion = null,
-            onDismiss = { mostrandoAgregar = false },
-            onConfirmar = { nombre, bandera, eliminado ->
-                vm.guardarEquipo(Team(n = nombre, f = bandera, eliminated = eliminado, position = freeSlot))
-                mostrandoAgregar = false
+    if (showAddDialog && freeSlot != null) {
+        TeamDialog(
+            title = stringResource(R.string.dialog_add_team_title, freeSlot),
+            teamBeingEdited = null,
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, flag, eliminated ->
+                vm.saveTeam(Team(n = name, f = flag, eliminated = eliminated, position = freeSlot))
+                showAddDialog = false
             }
         )
     }
 
-    teamParaEliminar?.let { team ->
+    teamToDelete?.let { team ->
         AlertDialog(
-            onDismissRequest = { teamParaEliminar = null },
+            onDismissRequest = { teamToDelete = null },
             containerColor = COL_CARD,
-            title = { Text("¿Eliminar equipo?", color = COL_TEXT_CREAM, fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.dialog_delete_team_title), color = COL_TEXT_CREAM, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "Se eliminará ${team.f} ${team.n} del slot ${team.position}.",
+                    stringResource(R.string.dialog_delete_team_message, team.f, displayName(team), team.position),
                     color = Color(0xFFBDA87E)
                 )
             },
             confirmButton = {
-                TextButton(onClick = { vm.eliminarEquipo(team); teamParaEliminar = null }) {
-                    Text("Eliminar", color = COL_DANGER)
+                TextButton(onClick = { vm.deleteTeam(team); teamToDelete = null }) {
+                    Text(stringResource(R.string.action_delete), color = COL_DANGER)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { teamParaEliminar = null }) {
-                    Text("Cancelar", color = COL_TEXT_DIM)
+                TextButton(onClick = { teamToDelete = null }) {
+                    Text(stringResource(R.string.action_cancel), color = COL_TEXT_DIM)
                 }
             }
         )
@@ -212,37 +221,38 @@ fun EquiposScreen(
 }
 
 @Composable
-private fun EquipoDialog(
-    titulo: String,
-    equipoEnEdicion: Team?,
+private fun TeamDialog(
+    title: String,
+    teamBeingEdited: Team?,
     onDismiss: () -> Unit,
-    onConfirmar: (nombre: String, bandera: String, eliminado: Boolean) -> Unit,
+    onConfirm: (name: String, flag: String, eliminated: Boolean) -> Unit,
 ) {
-    var nombre by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.n ?: "") }
-    var bandera by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.f ?: "") }
-    var eliminado by remember(equipoEnEdicion) { mutableStateOf(equipoEnEdicion?.eliminated ?: false) }
+    val initialName = teamBeingEdited?.let { displayName(it) } ?: ""
+    var name by remember(teamBeingEdited) { mutableStateOf(initialName) }
+    var flag by remember(teamBeingEdited) { mutableStateOf(teamBeingEdited?.f ?: "") }
+    var eliminated by remember(teamBeingEdited) { mutableStateOf(teamBeingEdited?.eliminated ?: false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = COL_CARD,
-        title = { Text(titulo, color = COL_TEXT_CREAM, fontWeight = FontWeight.Bold) },
+        title = { Text(title, color = COL_TEXT_CREAM, fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 OutlinedTextField(
-                    value = nombre,
-                    onValueChange = { nombre = it },
-                    label = { Text("Nombre") },
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.field_name_label)) },
                     singleLine = true,
-                    colors = campoColors(),
+                    colors = fieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = bandera,
-                    onValueChange = { if (it.length <= 8) bandera = it },
-                    label = { Text("Bandera (emoji)") },
+                    value = flag,
+                    onValueChange = { if (it.length <= 8) flag = it },
+                    label = { Text(stringResource(R.string.field_flag_label)) },
                     singleLine = true,
-                    colors = campoColors(),
+                    colors = fieldColors(),
                     modifier = Modifier.width(140.dp)
                 )
                 Spacer(Modifier.height(12.dp))
@@ -250,10 +260,10 @@ private fun EquipoDialog(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Eliminado", color = COL_TEXT_CREAM, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.status_eliminated), color = COL_TEXT_CREAM, modifier = Modifier.weight(1f))
                     Switch(
-                        checked = eliminado,
-                        onCheckedChange = { eliminado = it },
+                        checked = eliminated,
+                        onCheckedChange = { eliminated = it },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = COL_GOLD,
                             checkedTrackColor = COL_GOLD.copy(alpha = 0.5f)
@@ -264,12 +274,12 @@ private fun EquipoDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirmar(nombre.trim(), bandera.trim(), eliminado) },
-                enabled = nombre.isNotBlank() && bandera.isNotBlank()
-            ) { Text("Guardar", color = COL_GOLD) }
+                onClick = { onConfirm(name.trim(), flag.trim(), eliminated) },
+                enabled = name.isNotBlank() && flag.isNotBlank()
+            ) { Text(stringResource(R.string.action_save), color = COL_GOLD) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar", color = COL_TEXT_DIM) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel), color = COL_TEXT_DIM) }
         }
     )
 }

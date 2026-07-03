@@ -6,8 +6,8 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
-/** Cliente para el JSON estático de openfootball (fallback sin key); el baseUrl es un
- *  relleno válido ya que el @GET de OpenFootballService usa una URL absoluta. */
+/** Client for openfootball's static JSON (keyless fallback); the baseUrl is just a
+ *  valid placeholder since OpenFootballService's @GET uses an absolute URL. */
 object OpenFootballClient {
     private val json = Json { ignoreUnknownKeys = true }
     private val okHttp = OkHttpClient.Builder().build()

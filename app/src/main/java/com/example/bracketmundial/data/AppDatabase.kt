@@ -4,10 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.bracketmundial.INITIAL_TEAMS
+import com.example.bracketmundial.Team
 import kotlinx.coroutines.flow.first
 
-@Database(entities = [TeamEntity::class], version = 2, exportSchema = false)
+@Database(entities = [TeamEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun teamDao(): TeamDao
 
@@ -22,8 +22,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "bracket.db"
                 )
-                    // App personal sin usuarios existentes que migrar: en vez de escribir
-                    // una migración real, se recrea la tabla y se resiembra desde INITIAL_TEAMS.
+                    // Personal app with no existing users to migrate: instead of writing
+                    // a real migration, the table is recreated and reseeded from initialTeams().
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }
@@ -31,9 +31,9 @@ abstract class AppDatabase : RoomDatabase() {
     }
 }
 
-/** Siembra los 32 equipos iniciales si la tabla está vacía (primer arranque). */
-suspend fun TeamDao.seedIfEmpty() {
+/** Seeds the 32 initial teams if the table is empty (first launch). */
+suspend fun TeamDao.seedIfEmpty(teams: List<Team>) {
     if (observeAll().first().isEmpty()) {
-        INITIAL_TEAMS.forEach { upsert(it.toEntity()) }
+        teams.forEach { upsert(it.toEntity()) }
     }
 }

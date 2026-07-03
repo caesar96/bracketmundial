@@ -9,20 +9,21 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Proveedor fallback sin key: JSON estático de openfootball, se actualiza ~1 vez al día. */
+/** Keyless fallback provider: openfootball's static JSON, updated ~once a day.
+ *  [sourceName] is passed in already localized (it's descriptive text, not a brand name). */
 class OpenFootballProvider(
+    override val sourceName: String,
     private val service: OpenFootballService = OpenFootballClient.service,
 ) : ResultsProvider {
-    override val nombreFuente = "openfootball (datos ~1 vez al día)"
 
     override suspend fun finishedKnockoutMatches(): List<MatchResult> =
         service.worldCup2026().matches
             .filter { it.score?.ft?.size == 2 }
-            .filter { esEliminatoria(it) }
+            .filter { isKnockoutMatch(it) }
             .mapNotNull { it.toMatchResult() }
 }
 
-private fun esEliminatoria(m: OpenFootballMatch): Boolean {
+private fun isKnockoutMatch(m: OpenFootballMatch): Boolean {
     if (m.group != null) return false
     val round = m.round.orEmpty()
     if (round.contains("Third", ignoreCase = true)) return false
@@ -30,8 +31,8 @@ private fun esEliminatoria(m: OpenFootballMatch): Boolean {
     return true
 }
 
-/** team1/team2 pueden venir como "Mexico" o como {"name": "Mexico"}. */
-private fun JsonElement?.nombreEquipo(): String? = when (this) {
+/** team1/team2 can come as "Mexico" or as {"name": "Mexico"}. */
+private fun JsonElement?.teamName(): String? = when (this) {
     null -> null
     is JsonObject -> this["name"]?.jsonPrimitive?.contentOrNull
     is JsonPrimitive -> contentOrNull
@@ -40,12 +41,12 @@ private fun JsonElement?.nombreEquipo(): String? = when (this) {
 
 private fun OpenFootballMatch.toMatchResult(): MatchResult? {
     val ft = score?.ft ?: return null
-    val nombre1 = team1.nombreEquipo() ?: return null
-    val nombre2 = team2.nombreEquipo() ?: return null
-    val marcador = "$nombre1 ${ft[0]}-${ft[1]} $nombre2"
+    val name1 = team1.teamName() ?: return null
+    val name2 = team2.teamName() ?: return null
+    val scoreline = "$name1 ${ft[0]}-${ft[1]} $name2"
     return when {
-        ft[0] > ft[1] -> MatchResult(nombre1, nombre2, marcador)
-        ft[1] > ft[0] -> MatchResult(nombre2, nombre1, marcador)
-        else -> null // empate: sin datos de penales confiables, mejor omitir que adivinar
+        ft[0] > ft[1] -> MatchResult(name1, name2, scoreline)
+        ft[1] > ft[0] -> MatchResult(name2, name1, scoreline)
+        else -> null // draw: no reliable penalty data, better to omit than guess
     }
 }

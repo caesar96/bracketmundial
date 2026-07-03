@@ -13,7 +13,8 @@ data class TeamEntity(
     val colorArgb: Long?,
     val wins: Int,
     val eliminated: Boolean,
-    val hora: String?,
+    val matchTime: String?,
+    val countryKey: String?,
 )
 
 fun TeamEntity.toTeam(): Team = Team(
@@ -22,8 +23,9 @@ fun TeamEntity.toTeam(): Team = Team(
     c = colorArgb?.let { Color(it.toULong()) },
     wins = wins,
     eliminated = eliminated,
-    hora = hora,
+    matchTime = matchTime,
     position = position,
+    countryKey = countryKey,
 )
 
 fun Team.toEntity(): TeamEntity = TeamEntity(
@@ -33,5 +35,6 @@ fun Team.toEntity(): TeamEntity = TeamEntity(
     colorArgb = c?.value?.toLong(),
     wins = wins,
     eliminated = eliminated,
-    hora = hora,
+    matchTime = matchTime,
+    countryKey = countryKey,
 )

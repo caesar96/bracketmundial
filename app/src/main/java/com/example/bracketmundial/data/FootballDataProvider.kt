@@ -4,31 +4,31 @@ import com.example.bracketmundial.data.network.FootballDataClient
 import com.example.bracketmundial.data.network.FootballDataMatch
 import com.example.bracketmundial.data.network.FootballDataService
 
-/** Proveedor principal: football-data.org v4, requiere token (ver FOOTBALLDATA_TOKEN). */
+/** Main provider: football-data.org v4, requires a token (see FOOTBALLDATA_TOKEN). */
 class FootballDataProvider(
     private val service: FootballDataService = FootballDataClient.service,
 ) : ResultsProvider {
-    override val nombreFuente = "football-data.org"
+    override val sourceName = "football-data.org"
 
     override suspend fun finishedKnockoutMatches(): List<MatchResult> =
         service.matches().matches
             .filter { it.status == "FINISHED" }
-            .filter { esRondaEliminatoria(it.stage) }
+            .filter { isKnockoutStage(it.stage) }
             .mapNotNull { it.toMatchResult() }
 }
 
-/** football-data.org puede sumar stages nuevos en 2026 (p. ej. LAST_32); en vez de una
- *  lista cerrada de rondas, se excluye solo lo que sabemos que NO es eliminatoria. */
-private fun esRondaEliminatoria(stage: String) =
+/** football-data.org may add new stages in 2026 (e.g. LAST_32); instead of a
+ *  closed list of rounds, we only exclude what we know is NOT a knockout stage. */
+private fun isKnockoutStage(stage: String) =
     !stage.equals("GROUP_STAGE", ignoreCase = true) && !stage.contains("THIRD", ignoreCase = true)
 
 private fun FootballDataMatch.toMatchResult(): MatchResult? {
     val homeName = homeTeam.name ?: return null
     val awayName = awayTeam.name ?: return null
-    val marcador = "$homeName ${score.fullTime.home}-${score.fullTime.away} $awayName"
+    val scoreline = "$homeName ${score.fullTime.home}-${score.fullTime.away} $awayName"
     return when (score.winner) {
-        "HOME_TEAM" -> MatchResult(homeName, awayName, marcador)
-        "AWAY_TEAM" -> MatchResult(awayName, homeName, marcador)
-        else -> null // empate o dato ausente: se ignora, no adivinamos
+        "HOME_TEAM" -> MatchResult(homeName, awayName, scoreline)
+        "AWAY_TEAM" -> MatchResult(awayName, homeName, scoreline)
+        else -> null // draw or missing data: ignored, we don't guess
     }
 }

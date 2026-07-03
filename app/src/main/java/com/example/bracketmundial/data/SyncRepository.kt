@@ -1,108 +1,115 @@
 package com.example.bracketmundial.data
 
-import com.example.bracketmundial.BuildConfig
+import android.content.Context
+import com.example.bracketmundial.R
 import com.example.bracketmundial.Team
-import com.example.bracketmundial.aplicarResultado
-import com.example.bracketmundial.rivalActual
+import com.example.bracketmundial.applyResult
+import com.example.bracketmundial.currentRival
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 import retrofit2.HttpException
 
 data class SyncResult(
-    val aplicados: List<String> = emptyList(),
+    val applied: List<String> = emptyList(),
     val error: String? = null,
-    val reintentable: Boolean = false,
-    val fuente: String = "",
+    val retryable: Boolean = false,
+    val source: String = "",
 )
 
-/** Nombre en inglés (tal como lo devuelven football-data.org / openfootball) -> nombre local (español). */
-private val NOMBRE_API_A_LOCAL: Map<String, String> = mapOf(
-    "mexico" to "México",
-    "england" to "Inglaterra",
-    "japan" to "Japón",
-    "ivory coast" to "C. de Marfil",
-    "norway" to "Noruega",
-    "germany" to "Alemania",
-    "brazil" to "Brasil",
-    "ecuador" to "Ecuador",
-    "dr congo" to "RD Congo",
-    "congo dr" to "RD Congo", // football-data.org lo devuelve en este orden
-    "argentina" to "Argentina",
-    "cape verde" to "Cabo Verde",
-    "cape verde islands" to "Cabo Verde", // football-data.org
-    "australia" to "Australia",
-    "egypt" to "Egipto",
-    "switzerland" to "Suiza",
-    "algeria" to "Argelia",
-    "colombia" to "Colombia",
-    "ghana" to "Ghana",
-    "senegal" to "Senegal",
-    "belgium" to "Bélgica",
-    "bosnia and herzegovina" to "Bosnia",
-    "bosnia-herzegovina" to "Bosnia", // football-data.org
-    "usa" to "EE. UU.",
-    "united states" to "EE. UU.", // football-data.org
-    "austria" to "Austria",
-    "spain" to "España",
-    "croatia" to "Croacia",
-    "portugal" to "Portugal",
-    "morocco" to "Marruecos",
-    "south africa" to "Sudáfrica",
-    "netherlands" to "Países Bajos",
-    "canada" to "Canadá",
-    "sweden" to "Suecia",
-    "france" to "Francia",
-    "paraguay" to "Paraguay",
+/** English API team name -> the canonical countryKey (see COUNTRY_NAME_RES) it refers to.
+ *  Matching by this stable key — instead of by display-name string — keeps working
+ *  regardless of device locale and is automatically safe against renames: if a team's
+ *  countryKey was cleared (because its name was manually overridden), it simply stops
+ *  matching that API name rather than mismatching against the wrong team. */
+private val API_NAME_TO_COUNTRY_KEY: Map<String, String> = mapOf(
+    "mexico" to "mexico",
+    "england" to "england",
+    "japan" to "japan",
+    "ivory coast" to "ivory_coast",
+    "norway" to "norway",
+    "germany" to "germany",
+    "brazil" to "brazil",
+    "ecuador" to "ecuador",
+    "dr congo" to "dr_congo",
+    "congo dr" to "dr_congo", // football-data.org returns it in this order
+    "argentina" to "argentina",
+    "cape verde" to "cape_verde",
+    "cape verde islands" to "cape_verde", // football-data.org
+    "australia" to "australia",
+    "egypt" to "egypt",
+    "switzerland" to "switzerland",
+    "algeria" to "algeria",
+    "colombia" to "colombia",
+    "ghana" to "ghana",
+    "senegal" to "senegal",
+    "belgium" to "belgium",
+    "bosnia and herzegovina" to "bosnia",
+    "bosnia-herzegovina" to "bosnia", // football-data.org
+    "usa" to "usa",
+    "united states" to "usa", // football-data.org
+    "austria" to "austria",
+    "spain" to "spain",
+    "croatia" to "croatia",
+    "portugal" to "portugal",
+    "morocco" to "morocco",
+    "south africa" to "south_africa",
+    "netherlands" to "netherlands",
+    "canada" to "canada",
+    "sweden" to "sweden",
+    "france" to "france",
+    "paraguay" to "paraguay",
 )
 
-private fun normalizar(s: String) = s.trim().lowercase()
+private fun normalize(s: String) = s.trim().lowercase()
 
-/** football-data.org si hay token configurado; si no, el fallback openfootball (sin key). */
-internal fun proveedorPorDefecto(): ResultsProvider =
-    if (BuildConfig.FOOTBALLDATA_TOKEN.isNotBlank()) FootballDataProvider() else OpenFootballProvider()
+/** football-data.org if a token is configured; otherwise the keyless openfootball fallback. */
+internal fun defaultProvider(context: Context): ResultsProvider =
+    if (com.example.bracketmundial.BuildConfig.FOOTBALLDATA_TOKEN.isNotBlank()) FootballDataProvider()
+    else OpenFootballProvider(sourceName = context.getString(R.string.provider_name_openfootball))
 
-/** Sincroniza resultados reales del Mundial con el bracket local, a través de un [ResultsProvider]. */
+/** Syncs real World Cup results into the local bracket, through a [ResultsProvider]. */
 class SyncRepository(
+    private val context: Context,
     private val dao: TeamDao,
-    private val provider: ResultsProvider = proveedorPorDefecto(),
+    private val provider: ResultsProvider = defaultProvider(context),
 ) {
     suspend fun sync(): SyncResult {
         val matches = try {
             provider.finishedKnockoutMatches()
         } catch (e: IOException) {
-            return SyncResult(error = "Sin conexión a internet", reintentable = true, fuente = provider.nombreFuente)
+            return SyncResult(error = context.getString(R.string.error_no_internet), retryable = true, source = provider.sourceName)
         } catch (e: HttpException) {
-            val mensaje = when (e.code()) {
-                401, 403 -> "Token inválido"
-                429 -> "Límite de solicitudes alcanzado"
-                else -> "Error del servidor (${e.code()})"
+            val message = when (e.code()) {
+                401, 403 -> context.getString(R.string.error_invalid_token)
+                429 -> context.getString(R.string.error_rate_limit)
+                else -> context.getString(R.string.error_server, e.code())
             }
-            return SyncResult(error = mensaje, fuente = provider.nombreFuente)
+            return SyncResult(error = message, source = provider.sourceName)
         }
 
-        val equipos = dao.observeAll().first().map { it.toTeam() }.associateBy { it.position }.toMutableMap()
-        val aplicados = mutableListOf<String>()
-        matches.forEach { match -> aplicarSiValido(match, equipos)?.let { aplicados += it } }
+        val teamsByPosition = dao.observeAll().first().map { it.toTeam() }.associateBy { it.position }.toMutableMap()
+        val applied = mutableListOf<String>()
+        matches.forEach { match -> applyIfValid(match, teamsByPosition)?.let { applied += it } }
 
-        return SyncResult(aplicados = aplicados, fuente = provider.nombreFuente)
+        return SyncResult(applied = applied, source = provider.sourceName)
     }
 
-    /** Aplica [match] si, y solo si, coincide con nuestra predicción del bracket local
-     *  (ninguno eliminado, mismas wins, rivales válidos según rivalActual). Idempotente:
-     *  un resultado ya aplicado deja de cumplir estas condiciones. */
-    private suspend fun aplicarSiValido(match: MatchResult, equipos: MutableMap<Int, Team>): String? {
-        val nombreGanador = NOMBRE_API_A_LOCAL[normalizar(match.winnerName)] ?: return null
-        val nombrePerdedor = NOMBRE_API_A_LOCAL[normalizar(match.loserName)] ?: return null
-        val ganador = equipos.values.firstOrNull { normalizar(it.n) == normalizar(nombreGanador) } ?: return null
-        val perdedor = equipos.values.firstOrNull { normalizar(it.n) == normalizar(nombrePerdedor) } ?: return null
+    /** Applies [match] if, and only if, it matches our local bracket's prediction
+     *  (neither eliminated, same wins, valid rivals per currentRival). Idempotent:
+     *  a result already applied stops meeting these conditions. */
+    private suspend fun applyIfValid(match: MatchResult, teamsByPosition: MutableMap<Int, Team>): String? {
+        val winnerKey = API_NAME_TO_COUNTRY_KEY[normalize(match.winnerName)] ?: return null
+        val loserKey = API_NAME_TO_COUNTRY_KEY[normalize(match.loserName)] ?: return null
+        val winner = teamsByPosition.values.firstOrNull { it.countryKey == winnerKey } ?: return null
+        val loser = teamsByPosition.values.firstOrNull { it.countryKey == loserKey } ?: return null
 
-        if (ganador.eliminated || perdedor.eliminated) return null
-        if (perdedor.wins != ganador.wins) return null
-        if (rivalActual(equipos, ganador.position)?.position != perdedor.position) return null
+        if (winner.eliminated || loser.eliminated) return null
+        if (loser.wins != winner.wins) return null
+        if (currentRival(teamsByPosition, winner.position)?.position != loser.position) return null
 
-        aplicarResultado(dao, equipos.values.toList(), ganador.position, perdedor.position)
-        equipos[ganador.position] = ganador.copy(wins = ganador.wins + 1, hora = null)
-        equipos[perdedor.position] = perdedor.copy(eliminated = true, hora = null)
+        applyResult(dao, teamsByPosition.values.toList(), winner.position, loser.position)
+        teamsByPosition[winner.position] = winner.copy(wins = winner.wins + 1, matchTime = null)
+        teamsByPosition[loser.position] = loser.copy(eliminated = true, matchTime = null)
 
         return match.summary
     }

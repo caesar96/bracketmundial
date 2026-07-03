@@ -1,16 +1,16 @@
 package com.example.bracketmundial.data
 
-/** Resultado de un partido de eliminatorias, ya resuelto por el proveedor (ganador/perdedor). */
+/** Result of a knockout match, already resolved by the provider (winner/loser). */
 data class MatchResult(
     val winnerName: String,
     val loserName: String,
     val summary: String, // "Mexico 2-1 England"
 )
 
-/** Fuente de resultados reales del Mundial; SyncRepository no sabe (ni le importa) de dónde vienen. */
+/** Source of real World Cup results; SyncRepository doesn't know (or care) where they come from. */
 interface ResultsProvider {
-    /** Nombre legible de la fuente, para mostrarlo en el mensaje de sincronización. */
-    val nombreFuente: String
+    /** Readable source name, shown in the sync message. */
+    val sourceName: String
 
     suspend fun finishedKnockoutMatches(): List<MatchResult>
 }

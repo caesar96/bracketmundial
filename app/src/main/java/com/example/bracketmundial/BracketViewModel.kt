@@ -19,23 +19,24 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Avanza al [ganadorPos] una ronda (wins++) y elimina al [perdedorPos]; usado tanto por
- *  registro manual (registrarGanador) como por la sincronización automática (SyncRepository). */
-suspend fun aplicarResultado(dao: TeamDao, teams: List<Team>, ganadorPos: Int, perdedorPos: Int) {
-    val ganador = teams.firstOrNull { it.position == ganadorPos } ?: return
-    if (ganador.c == null) {
-        dao.setColor(ganadorPos, FALLBACK_COLORS[ganadorPos % FALLBACK_COLORS.size].value.toLong())
+/** Advances [winnerPos] one round (wins++) and eliminates [loserPos]; used both by
+ *  manual recording (recordWinner) and by automatic sync (SyncRepository). */
+suspend fun applyResult(dao: TeamDao, teams: List<Team>, winnerPos: Int, loserPos: Int) {
+    val winner = teams.firstOrNull { it.position == winnerPos } ?: return
+    if (winner.c == null) {
+        dao.setColor(winnerPos, FALLBACK_COLORS[winnerPos % FALLBACK_COLORS.size].value.toLong())
     }
-    dao.avanzar(ganadorPos)
-    dao.eliminar(perdedorPos)
+    dao.advance(winnerPos)
+    dao.eliminate(loserPos)
 }
 
 /* ============================================================
- *  VIEWMODEL — los resultados viven en Room; la UI solo los pinta.
- *  registrarGanador(ganador, perdedor): avanza al ganador una ronda
- *  (wins++) y elimina al perdedor, para cualquier ronda del torneo.
+ *  VIEWMODEL — results live in Room; the UI only renders them.
+ *  recordWinner(winner, loser): advances the winner one round
+ *  (wins++) and eliminates the loser, for any round of the tournament.
  * ============================================================ */
 class BracketViewModel(
+    private val context: Context,
     private val dao: TeamDao,
     private val syncRepository: SyncRepository,
 ) : ViewModel() {
@@ -51,7 +52,7 @@ class BracketViewModel(
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
 
     init {
-        viewModelScope.launch { dao.seedIfEmpty() }
+        viewModelScope.launch { dao.seedIfEmpty(initialTeams(context)) }
         refresh()
     }
 
@@ -59,53 +60,54 @@ class BracketViewModel(
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
-            val resultado = syncRepository.sync()
-            val base = when (resultado.aplicados.size) {
-                0 -> "sin resultados nuevos"
-                1 -> "1 resultado nuevo"
-                else -> "${resultado.aplicados.size} resultados nuevos"
+            val result = syncRepository.sync()
+            val base = when (result.applied.size) {
+                0 -> context.getString(R.string.sync_no_new_results)
+                1 -> context.getString(R.string.sync_one_new_result)
+                else -> context.getString(R.string.sync_new_results_count, result.applied.size)
             }
-            _syncMessage.value = resultado.error ?: "${resultado.fuente}: $base"
+            _syncMessage.value = result.error ?: "${result.source}: $base"
             _isSyncing.value = false
         }
     }
 
-    fun limpiarMensajeSync() {
+    fun clearSyncMessage() {
         _syncMessage.value = null
     }
 
-    fun registrarGanador(ganadorPos: Int, perdedorPos: Int) {
-        viewModelScope.launch { aplicarResultado(dao, teams.value, ganadorPos, perdedorPos) }
+    fun recordWinner(winnerPos: Int, loserPos: Int) {
+        viewModelScope.launch { applyResult(dao, teams.value, winnerPos, loserPos) }
     }
 
-    fun deshacerResultado(pos: Int) {
+    fun undoResult(pos: Int) {
         viewModelScope.launch {
             val byPos = teams.value.associateBy { it.position }
-            val vencido = rivalVencido(byPos, pos) ?: return@launch
-            dao.retroceder(pos)
-            dao.revivir(vencido.position)
+            val defeated = defeatedRival(byPos, pos) ?: return@launch
+            dao.retreat(pos)
+            dao.revive(defeated.position)
         }
     }
 
-    fun guardarEquipo(team: Team) {
+    fun saveTeam(team: Team) {
         viewModelScope.launch { dao.upsert(team.toEntity()) }
     }
 
-    fun eliminarEquipo(team: Team) {
+    fun deleteTeam(team: Team) {
         viewModelScope.launch { dao.delete(team.toEntity()) }
     }
 
-    fun reiniciar() {
+    fun resetBracket() {
         viewModelScope.launch {
-            INITIAL_TEAMS.forEach { dao.upsert(it.toEntity()) }
+            initialTeams(context).forEach { dao.upsert(it.toEntity()) }
         }
     }
 
     companion object {
         fun factory(context: Context) = viewModelFactory {
             initializer {
-                val dao = AppDatabase.getInstance(context).teamDao()
-                BracketViewModel(dao, SyncRepository(dao))
+                val appContext = context.applicationContext
+                val dao = AppDatabase.getInstance(appContext).teamDao()
+                BracketViewModel(appContext, dao, SyncRepository(appContext, dao))
             }
         }
     }
